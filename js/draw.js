@@ -20,6 +20,19 @@ export default class Draw {
     danceMoves = [];
     danceMovesIndex = -1;
 
+    positive_col = "hsl(138, 29%, 69%)";  // previously "green"
+    average_col  = "hsl( 46, 74%, 40%)";  // previously "orange";
+    negative_col = "hsl(  0, 61%, 54%)";  // previously "red"
+
+    // https://www.schemecolor.com/real-skin-tones-color-palette.php
+    skintone_col = "#E0AC69";
+    joint_col    = "#8D5524";
+    bone_col     = "#FFDBAC";
+    
+    calibrate_setup_time_secs     = 5; 
+    countdown_update_interval_msecs = 100; 
+    countdown_msec_cap              = 1000 - this.countdown_update_interval_msecs;
+    
     constructor(ctx, canvas, video) {
         this.ctx = ctx;
         this.canvas = canvas;
@@ -36,7 +49,7 @@ export default class Draw {
     }
 
     restartSong() {
-        setInterval(this.updateCountdown.bind(this), 100);
+        setInterval(this.updateCountdown.bind(this), this.countdown_update_interval_msecs);
         document.querySelector("audio").currentTime = 0;
         document.querySelector("audio").play();
     }
@@ -47,11 +60,11 @@ export default class Draw {
     }
 
     setUpFileUploadEventListener() {
-        if (window.location.pathname == "/game.html") {
+        if (window.location.pathname.endsWith("/game.html")) {
             document.querySelector("#dancingQueen").addEventListener("click", async (e) => {
                 this.setDanceMoves(await this.loader.loadPrerecorded());
             })
-        } else if (window.location.pathname == "/created_game.html") {
+        } else if (window.location.pathname.endsWith("/created_game.html")) {
             document.querySelector("#fileUpload").addEventListener("change", async (e) => {
                 this.setDanceMoves(await this.loader.getFileContents(e));
             });
@@ -62,23 +75,26 @@ export default class Draw {
         console.log(jsonString);
         this.danceMoves = JSON.parse(jsonString);
         this.nextDanceMove();
-        this.calibrateAfterSeconds(5);
+        this.calibrateAfterSeconds(this.calibrate_setup_time_secs);
     }
 
     calibrateAfterSeconds(seconds) {
-        setTimeout(this.checkIfCalibrationNeeded.bind(this), seconds * 1000);
+	let statusElem = document.getElementById('status');
+	statusElem.innerText = "Status: Starting calibration process";
+
+        setTimeout(this.checkIfCalibrationNeeded.bind(this), seconds * 1000);	
         setTimeout(this.restartSong.bind(this), seconds * 1000);
     }
 
     setupRecordButtonEventListener() {
-        if (window.location.pathname != "/record_dance.html") return;
+        if (!window.location.pathname.endsWith("/record_dance.html")) return;
         document.querySelector("#record").addEventListener("click", () => {
             if (this.recorder.recording) {
                 this.recorder.stopRecording();
                 this.stopSong();
             } else {
                 this.recorder.startRecording();
-                this.calibrateAfterSeconds(5);
+                this.calibrateAfterSeconds(this.calibrate_setup_time_secs);
                 document.querySelector("#record").textContent = "Stop Recording";
             }
         })
@@ -91,10 +107,13 @@ export default class Draw {
                 const keyPoint = pose.keypoints[j];
                 if (keyPoint.score > 0.2) {
                     if (pose.target) {
-                        this.ctx.fillStyle = "#00ff00";
-                        this.drawEllipse(keyPoint.position.x, keyPoint.position.y, 7.5);
+			// Target pose to strike
+                        this.ctx.fillStyle = "#0000ff"; // used to be #00ff00
+                        this.drawCircle(keyPoint.position.x, keyPoint.position.y, 7.5);
                     } else {
-                        //this.ctx.fillStyle = "#FF0000";
+			// Live position from PoseNet
+                        this.ctx.fillStyle = "hsla(0, 61%, 54%, 0.2)"; // used to be red
+			this.drawCircle(keyPoint.position.x, keyPoint.position.y, 7.5);
                         this.goodPoints[j] = keyPoint;
                     }
 
@@ -103,9 +122,29 @@ export default class Draw {
         })
     }
 
-    drawEllipse(x, y, r) {
+    drawCircle(x, y, r) {
         this.ctx.beginPath();
         this.ctx.ellipse(x, y, r, r, Math.PI * 2, 0, Math.PI * 2);
+        this.ctx.closePath();
+        this.ctx.fill();
+    }
+
+    drawBodyPartEllipse(x1, y1, x2, y2, minor_r) {
+
+	const x_diff = x2 - x1;
+	const y_diff = y2 - y1;
+	
+	const line_len = Math.sqrt(x_diff*x_diff + y_diff*y_diff);
+
+	const xm = (x1 + x2) / 2.0;
+	const ym = (y1 + y2) / 2.0;
+
+	const major_r = line_len / 2.0;
+
+	const rot_angle = Math.atan2(y_diff,x_diff);
+	
+        this.ctx.beginPath();
+        this.ctx.ellipse(xm, ym, major_r, minor_r, rot_angle, 0, Math.PI * 2);
         this.ctx.closePath();
         this.ctx.fill();
     }
@@ -113,22 +152,41 @@ export default class Draw {
     // A function to draw the skeletons
     drawSkeleton() {
         // Loop through all the skeletons detected
-        for (let i = 0; i < this.poses.length; i += 1) {
+        for (let i = 0; i < this.poses.length; i++) {
             const skeleton = this.poses[i].skeleton;
+
             // For every skeleton, loop through all body connections
-            for (let j = 0; j < skeleton.length; j += 1) {
+            for (let j = 0; j < skeleton.length; j++) {
                 const partA = skeleton[j][0];
                 const partB = skeleton[j][1];
+
                 if (this.poses[i].pose.target) {
-                    this.ctx.strokeStyle = "#00FF00";
+                    this.ctx.strokeStyle = this.bone_col;
+                    this.ctx.fillStyle   = this.skintone_col;
+
+		    const x1 = partA.position.x;
+		    const y1 = partA.position.y;
+		    
+		    const x2 = partB.position.x;
+		    const y2 = partB.position.y;
+
+		    this.drawBodyPartEllipse(x1, y1, x2, y2, 10.0);
+		    
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x1,y1)
+                    this.ctx.lineTo(x2,y2);
+                    this.ctx.closePath();
+                    this.ctx.stroke();
+		    
+		}
+		else {
+		    this.ctx.strokeStyle = "hsla(0, 61%, 54%, 0.2)"; // used to be red
                     this.ctx.beginPath();
                     this.ctx.moveTo(partA.position.x, partA.position.y)
                     this.ctx.lineTo(partB.position.x, partB.position.y);
                     this.ctx.closePath();
-                    this.ctx.stroke();
-                } //else {
-                //this.ctx.strokeStyle = "#FF0000";
-                //}
+                    this.ctx.stroke();		    
+		}
             }
         }
     }
@@ -161,15 +219,20 @@ export default class Draw {
             amountToIncreaseScoreBy = matches - 4;
 
             if (!this.hasDonePose) {
+		let statusElem = document.getElementById('status');
                 if (amountToIncreaseScoreBy > 0){
-                    document.body.style.backgroundColor = "green";
+                    statusElem.style.backgroundColor = this.positive_col;
+		    statusElem.innerText = this.randomChoiceMessage(this.good_move_message);
                 }
                 else if (amountToIncreaseScoreBy < 0){
-                    document.body.style.backgroundColor = "red";
+                    statusElem.style.backgroundColor = this.negative_col;		    
+		    statusElem.innerText = this.randomChoiceMessage(this.bad_move_message);
                 }
                 else {
-                    document.body.style.backgroundColor = "orange";
+                    statusElem.style.backgroundColor = this.average_col;
+		    statusElem.innerText = "Pretty average";
                 }
+		
                 this.hasDonePose = true;
                 this.score += amountToIncreaseScoreBy;
                 this.updateScore();
@@ -188,17 +251,21 @@ export default class Draw {
     }
 
     updateCountdown() {
-        if (window.location.pathname != "/game.html" && window.location.pathname != "/created_game.html") return;
-
-        if (this.time < 9 && this.time > 2) {
-            document.body.style.backgroundColor = "white";
-        }
-
+        if (!window.location.pathname.endsWith("/game.html") && !window.location.pathname.endsWith("/created_game.html")) return;
+	
         const countdownEl = document.querySelector('#countdown');
-        const minutes = Math.floor(this.time / 60);
-        let seconds = this.time % 60;
 
-        countdownEl.innerHTML = `${minutes}: ${seconds}`;
+	const mseconds = (this.time * this.countdown_update_interval_msecs) % (60 * this.countdown_update_interval_msecs);	
+	const countdown_mseconds = this.countdown_msec_cap - mseconds;
+	
+	const countdown_seconds = countdown_mseconds / 1000.0;	
+	let countdown_seconds_1dp = Math.round(countdown_seconds * 10) / 10;
+
+	if (countdown_seconds_1dp == 0) {
+	    countdown_seconds_1dp = "0.0";
+	}
+	
+        countdownEl.innerHTML = `Seconds until next pose: ${countdown_seconds_1dp}`;
         this.time++;
 
         if (this.time == 10) {
@@ -215,9 +282,13 @@ export default class Draw {
             this.danceMovesIndex++;
         } else {
             this.danceMovesIndex = 0;
-            let message = "\r\n noice";
+	    let statusElem = document.getElementById('status');
+	    statusElem.style.backgroundColor = "#5FA6B7";
+	    statusElem.innerText = "";
+	    
+            let message = "\r\n Noice! :-)";
             if (this.score < 0) {
-                message = "\r\n You suck. Do better.";
+                message = "\r\n Room for improvement :-(";
             }
             alert("Final score: " + this.score + message);
             this.stopSong();
@@ -311,5 +382,45 @@ export default class Draw {
                 //}
             }
         }
+
+	let statusElem = document.getElementById('status');
+	statusElem.innerText = "Status: calibration process completed";
+
+	
     }
+
+    // http://blog.writeathome.com/index.php/2014/01/100-ways-to-say-great/
+    
+    good_move_message = [
+	"Great Move!",
+	"Admirable!", "Amazing!",  "Arresting!",  "Astonishing!",  "Astounding!",  "Awesome!",  "Awe-inspiring!",  "Beautiful!",
+	"Breathtaking!",  "Brilliant!",  "Capital!",  "Captivating!",  "Clever!",  "Commendable!",
+	"Delightful!",  "Distinguished!",  "Distinctive!",
+	"Engaging!",  "Enjoyable!",  "Estimable!",  "Excellent!",  "Exceptional!",  "Exemplary!",  "Exquisite!",  "Extraordinary!",
+	"Fabulous!",  "antastic!",  "Fascinating!",  "Finest!",  "First-rate!",  "Flawless!",  "Four-star!",
+	"Glorious!",  "Grand!",  "Impressive!",  "Incomparable!",  "Incredible!",  "Inestimable!",  "Invaluable!",
+	"Laudable!",  "Lovely!",
+	"Magnificent!",  "Marvelous!",  "Masterful!",  "Mind-blowing!",  "Mind-boggling!",  "Miraculous!",  "Monumental!",
+	"Notable!",  "Out of sight!",  "Out of this world!",  "Outstanding!",  "Overwhelming!",
+	"Peerless!",  "Perfect!",  "Phenomenal!",  "Praiseworthy!",  "Priceless!",
+	"Rapturous!",  "Rare!",  "Refreshing!",  "Remarkable!",
+	"Sensational!",  "Singular!",  "Skillful!",  "Smashing!",  "Solid!",  "Special!",  "Spectacular!",  "Splendid!",
+	"Splendiferous!",  "Splendorous!",  "Staggering!",  "Sterling!",  "Striking!",  "Stunning!",  "Stupendous!",
+	"Super!",  "Superb!",  "Super-duper!",  "Superior!",  "Superlative!",  "Supreme!",  "Surprising!",
+	"Terrific!",  "Thumbs up!",  "Thrilling!",  "Tiptop!",  "Top-notch!",  "Transcendent!",  "Tremendous!",
+	"Unbelievable!",  "Uncommon!",  "Unique!",  "Unparalleled!",  "Unprecedented!",
+	"Wonderful!",  "Wondrous!",  "World-class!"
+    ];
+
+
+    bad_move_message = [ "Ouch!!", "Mmmmm", "Haven't seen that before!", "Brave choice of move!" ];
+
+    // "Terrible", "Awful", "Rubbish", "Disgraceful", "Garbage", "Drivel" ];
+
+    randomChoiceMessage(array) {
+	let choice = array[Math.floor(Math.random() * array.length)];
+
+	return choice;
+    }
+	
 }

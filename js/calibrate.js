@@ -249,5 +249,5 @@ export function calibrate(pose, skeletonBone) {
 
     let absShoulderPair = skeletonBone;
 
-    pose = scaleAndShift(pose, absShoulderPair);
+    pose = scaleAndShift(pose, absShoulderPair);    
 }

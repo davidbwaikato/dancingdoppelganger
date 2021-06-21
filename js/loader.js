@@ -20,7 +20,7 @@ export default class Loader {
         return new Promise((resolve, reject) => {
             var xobj = new XMLHttpRequest();
             xobj.overrideMimeType("application/json");
-            xobj.open('GET', "/songs/dancing_queens_actual.json", true); // Replace 'appDataServices' with the path to your file
+            xobj.open('GET', "songs/dancing_queens_actual.json", true); // Replace 'appDataServices' with the path to your file
             xobj.onreadystatechange = function () {
                 if (xobj.readyState == 4 && xobj.status == "200") {
                     let danceMoves = xobj.responseText;

@@ -50,8 +50,23 @@
     display: grid;
     grid-template-columns: repeat(2,1fr);
 }
+.userInfo3{
+    padding: 13px;
+    text-align: center;
+    background: #5FA6B7;
+    color: white;
+    font-size: 32px;
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+}
 .Text{
     text-align: center;
+    font-size: 23px;
+    width: 600px;
+    margin: auto;
+}
+.RuleText{
+    text-align: left;
     font-size: 23px;
     width: 600px;
     margin: auto;

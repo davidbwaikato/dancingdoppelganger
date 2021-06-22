@@ -13,6 +13,7 @@ export default class Draw {
     targetPose;
     time = 0;
     score = 0;
+    score_history = [ 0 ];
     hasDonePose = false;
     absShoulderPair = undefined;
     calibratedFlag = false;
@@ -24,9 +25,11 @@ export default class Draw {
     average_col  = "hsl( 46, 74%, 40%)";  // previously "orange";
     negative_col = "hsl(  0, 61%, 54%)";  // previously "red"
 
+    posenet_col   = "hsla(0, 61%, 54%, 0.2)"; // used to be red
+    
     // https://www.schemecolor.com/real-skin-tones-color-palette.php
-    skintone_col = "#E0AC69";
-    joint_col    = "#8D5524";
+    skintone_col = "#8D5524";
+    joint_col    = "#E0AC69";
     bone_col     = "#FFDBAC";
     
     calibrate_setup_time_secs     = 5; 
@@ -108,11 +111,11 @@ export default class Draw {
                 if (keyPoint.score > 0.2) {
                     if (pose.target) {
 			// Target pose to strike
-                        this.ctx.fillStyle = "#0000ff"; // used to be #00ff00
+                        this.ctx.fillStyle = this.joint_col; 
                         this.drawCircle(keyPoint.position.x, keyPoint.position.y, 7.5);
                     } else {
 			// Live position from PoseNet
-                        this.ctx.fillStyle = "hsla(0, 61%, 54%, 0.2)"; // used to be red
+                        this.ctx.fillStyle = this.posenet_col;
 			this.drawCircle(keyPoint.position.x, keyPoint.position.y, 7.5);
                         this.goodPoints[j] = keyPoint;
                     }
@@ -232,10 +235,40 @@ export default class Draw {
                     statusElem.style.backgroundColor = this.average_col;
 		    statusElem.innerText = "Pretty average";
                 }
+
 		
                 this.hasDonePose = true;
                 this.score += amountToIncreaseScoreBy;
-                this.updateScore();
+		this.score_history.push(amountToIncreaseScoreBy);
+
+		// Work out if bonus-boost, currently used a window of the last 2 vals
+		if (this.score_history.length>=3) {
+
+		    const history_len = this.score_history.length;
+		    const window_start_pos = history_len -1;
+		    const window_end_pos = window_start_pos -1; // window size in effect 2
+
+		    let all_positive = true;
+		    let bonus_pos = window_start_pos;
+
+		    while (bonus_pos >= window_end_pos) {
+			const past_score = this.score_history[bonus_pos];
+			if (past_score<=0) {
+			    all_positive = false;
+			    break;
+			}
+			bonus_pos--;
+		    }
+
+		    if (all_positive) {
+			statusElem.innerText += "\n!!!!BONUS BOOST!!!!";
+			this.score += amountToIncreaseScoreBy;
+		    }
+
+		    this.updateScore();
+
+		}
+
             }
         }
     }
@@ -413,7 +446,7 @@ export default class Draw {
     ];
 
 
-    bad_move_message = [ "Ouch!!", "Mmmmm", "Haven't seen that before!", "Brave choice of move!" ];
+    bad_move_message = [ "Ouch!!", "Mmmmm!", "Haven't seen that before!", "Brave choice of move!" ];
 
     // "Terrible", "Awful", "Rubbish", "Disgraceful", "Garbage", "Drivel" ];
 
